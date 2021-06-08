@@ -2,7 +2,7 @@
 use std::fmt::Debug;
 use std::collections::HashMap;
 
-use crate::tree::{ Term, TermKind, Clause, atom };
+use crate::tree::{ Term, TermKind, Expr, ExprKind, Clause, atom };
 
 
 #[derive(Clone, Debug, PartialEq)]
@@ -39,9 +39,6 @@ impl Bindings {
                 } else {
                     TermKind::Var(n)
                 }
-            },
-            TermKind::Conjunct(n, m) => {
-                TermKind::Conjunct(self.substitute(n.clone()), self.substitute(m.clone()))
             },
         })
     }
@@ -91,9 +88,7 @@ impl Query {
     }
 
     pub fn solve_from(&self, db: &Database, at: usize) -> Option<Partial> {
-        let mut i = at;
-
-        while i < db.clauses.len() {
+        for i in at..db.clauses.len() {
             match &db.clauses[i] {
                 Clause::Fact(t) => {
                     if let Some((n, bindings)) = unify_term(&self.goal, &t) {
@@ -102,76 +97,46 @@ impl Query {
                 },
                 Clause::Rule(lhs, rhs) => {
                     if let Some((n, mut bindings)) = unify_term(&self.goal, lhs) {
-                        let mut queries = vec!();
-
-                        _collect_subqueries(&mut queries, rhs.clone());
-
-                        if let Some(partial) = self._solve_dependents(db, &bindings, queries) {
+                        if let Some(partial) = self._solve_expression(db, &bindings, rhs, 0) {
                             bindings = bindings.merge(&partial.bindings);
                             return Some(Partial::new(bindings.substitute(lhs.clone()), bindings, i));
                         }
                     }
                 },
             }
-            i += 1;
         }
 
         None
     }
 
-    fn _solve_dependents(&self, db: &Database, init_bindings: &Bindings, queries: Vec<Term>) -> Option<Partial> {
-        let mut i = 0;
-        let mut at_rule = 0;
-        let mut bindings = init_bindings.clone();
-        let mut partials: Vec<Partial> = vec!();
-
-        while i < queries.len() {
-            let mut dependent = Query { goal: bindings.substitute(queries[i].clone()) };
-            println!("Solving {:?} at {:?}", dependent.goal, at_rule);
-            match dependent.solve_from(db, at_rule) {
-                Some(partial) => {
-                    if partials.len() <= i {
-                        partials.push(partial);
-                    } else {
-                        partials[i] = partial;
+    fn _solve_expression(&self, db: &Database, init_bindings: &Bindings, expr: &Expr, at_rule: usize) -> Option<Partial> {
+        match &**expr {
+            ExprKind::Term(term) => {
+                let mut dependent = Query { goal: init_bindings.substitute(term.clone()) };
+                dependent.solve_from(db, at_rule)
+            },
+            ExprKind::Conjunct(expr1, expr2) => {
+                let mut rule = 0;
+                loop {
+                    match self._solve_expression(db, init_bindings, expr1, rule) {
+                        Some(partial) => {
+                            let bindings = init_bindings.merge(&partial.bindings);
+                            if let Some(partial) = self._solve_expression(db, &bindings, expr2, 0) {
+                                return Some(partial);
+                            }
+                            println!("Backtracking");
+                            rule = partial.rule + 1;
+                        },
+                        None => {
+                            println!("Out of backtrack options");
+                            return None;
+                       }
                     }
-
-                    bindings = bindings.merge(&partials[i].bindings.clone());
-                    at_rule = 0;
-                    i += 1;
-                },
-                None => {
-                    println!("Backtracking");
-                    if i == 0 {
-                        println!("Out of backtrack options");
-                        return None;
-                    }
-
-                    bindings = if i == 1 {
-                        init_bindings.clone()
-                    } else {
-                        partials[i - 2].bindings.clone()
-                    };
-                    at_rule = partials[i - 1].rule + 1;
-                    i -= 1;
-                },
-            }
+                }
+            },
         }
-        return Some(Partial::new(atom("true"), bindings, 0));
     }
 }
-
-
-fn _collect_subqueries(list: &mut Vec<Term>, expr: Term) {
-    match *expr {
-        TermKind::Conjunct(t1, t2) => {
-            _collect_subqueries(list, t1);
-            _collect_subqueries(list, t2);
-        },
-        t @ _ => list.push(Box::new(t)),
-    }
-}
-
 
 pub fn unify_term(term1: &Term, term2: &Term) -> Option<(Term, Bindings)> {
     println!("Check: {:?} =?= {:?}", term1, term2);

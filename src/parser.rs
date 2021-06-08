@@ -2,7 +2,7 @@
 use std::str::Chars;
 use std::iter::Peekable;
 
-use crate::tree::{ Term, TermKind, Clause, atom };
+use crate::tree::{ Term, TermKind, Expr, ExprKind, Clause, atom };
 
 
 #[derive(Clone, Debug, PartialEq)]
@@ -154,12 +154,12 @@ fn parse_term(input: &mut Peekable<Lexer>) -> Result<Term, ParseError> {
     }
 }
 
-fn parse_expression(input: &mut Peekable<Lexer>) -> Result<Term, ParseError> {
-    let term = parse_term(input)?;
+fn parse_expression(input: &mut Peekable<Lexer>) -> Result<Expr, ParseError> {
+    let term = Box::new(ExprKind::Term(parse_term(input)?));
     match input.peek() {
         Some(Token::Comma) => {
             input.next();
-            Ok(Box::new(TermKind::Conjunct(term, parse_expression(input)?)))
+            Ok(Box::new(ExprKind::Conjunct(term, parse_expression(input)?)))
         },
         _ => Ok(term),
     }
