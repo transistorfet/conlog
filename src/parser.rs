@@ -2,7 +2,7 @@
 use std::str::Chars;
 use std::iter::Peekable;
 
-use crate::tree::{ Term, TermKind, Expr, ExprKind, Clause, atom };
+use crate::tree::{ Term, TermKind, Expr, ExprKind, Clause };
 
 
 #[derive(Clone, Debug, PartialEq)]
@@ -70,7 +70,7 @@ fn is_whitespace(ch: char) -> bool {
 }
 
 fn is_word(ch: char) -> bool {
-    (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || (ch == '_')
+    (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || (ch == '_') || (ch == '!')
 }
 
 impl<'input> Iterator for Lexer<'input> {

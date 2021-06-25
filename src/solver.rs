@@ -44,6 +44,8 @@ impl Bindings {
     }
 }
 
+pub type BuiltinPredicate = fn(&Term, &Bindings, usize) -> Option<Partial>;
+
 pub struct Database {
     clauses: Vec<Clause>,
 }
@@ -96,7 +98,7 @@ impl Query {
                     }
                 },
                 Clause::Rule(lhs, rhs) => {
-                    if let Some((n, mut bindings)) = unify_term(&self.goal, lhs) {
+                    if let Some((_, mut bindings)) = unify_term(&self.goal, lhs) {
                         if let Some(partial) = self._solve_expression(db, &bindings, rhs, 0) {
                             bindings = bindings.merge(&partial.bindings);
                             return Some(Partial::new(bindings.substitute(lhs.clone()), bindings, i));
@@ -112,18 +114,31 @@ impl Query {
     fn _solve_expression(&self, db: &Database, init_bindings: &Bindings, expr: &Expr, at_rule: usize) -> Option<Partial> {
         match &**expr {
             ExprKind::Term(term) => {
-                let mut dependent = Query { goal: init_bindings.substitute(term.clone()) };
-                dependent.solve_from(db, at_rule)
+                if let Some(func) = lookup_builtin(term) {
+                    func(term, init_bindings, at_rule)
+                } else {
+                    let dependent = Query { goal: init_bindings.substitute(term.clone()) };
+                    dependent.solve_from(db, at_rule)
+                }
             },
             ExprKind::Conjunct(expr1, expr2) => {
                 let mut rule = 0;
                 loop {
                     match self._solve_expression(db, init_bindings, expr1, rule) {
                         Some(partial) => {
+                            // The first expr has a result, and if the second expr also has a result, then return
+                            // Otherwise backtrack and try to find another solution to the first expr
                             let bindings = init_bindings.merge(&partial.bindings);
                             if let Some(partial) = self._solve_expression(db, &bindings, expr2, 0) {
                                 return Some(partial);
                             }
+
+                            // If the previous expression was the cut operator, then don't backtrack
+                            if is_atom_of(expr1, "!") {
+                                println!("Cut");
+                                return None;
+                            }
+
                             println!("Backtracking");
                             rule = partial.rule + 1;
                         },
@@ -136,6 +151,20 @@ impl Query {
             },
         }
     }
+}
+
+pub fn is_atom_of(expr: &Expr, expected: &str) -> bool {
+    if let ExprKind::Term(term) = &**expr {
+        match &**term {
+            TermKind::Atom(string) | TermKind::Compound(string, _) => {
+                if string.as_str() == expected {
+                    return true;
+                }
+            },
+            _ => { },
+        }
+    }
+    return false;
 }
 
 pub fn unify_term(term1: &Term, term2: &Term) -> Option<(Term, Bindings)> {
@@ -169,5 +198,26 @@ pub fn unify_term(term1: &Term, term2: &Term) -> Option<(Term, Bindings)> {
 
         _ => None
     }
+}
+
+pub fn lookup_builtin(term: &Term) -> Option<BuiltinPredicate> {
+    match &**term {
+        TermKind::Atom(s) => {
+            match s.as_str() {
+                "!" => Some(builtin_cut),
+                "fail" => Some(builtin_fail),
+                _ => None
+            }
+        },
+        _ => None,
+    }
+}
+
+fn builtin_cut(_term: &Term, bindings: &Bindings, at_rule: usize) -> Option<Partial> {
+    Some(Partial::new(atom("true"), bindings.clone(), at_rule))
+}
+
+fn builtin_fail(_term: &Term, _bindings: &Bindings, _at_rule: usize) -> Option<Partial> {
+    None
 }
 

@@ -37,26 +37,32 @@ impl From<Term> for Expr {
 }
 
 
+#[allow(dead_code)]
 pub fn variable(name: &str) -> Term {
     Box::new(TermKind::Var(name.to_string()))
 }
 
+#[allow(dead_code)]
 pub fn atom(name: &str) -> Term {
     Box::new(TermKind::Atom(name.to_string()))
 }
 
+#[allow(dead_code)]
 pub fn compound(name: &str, args: Vec<Term>) -> Term {
     Box::new(TermKind::Compound(name.to_string(), args))
 }
 
+#[allow(dead_code)]
 pub fn conjunct(expr1: impl Into<Expr>, expr2: impl Into<Expr>) -> Expr {
     Box::new(ExprKind::Conjunct(expr1.into(), expr2.into()))
 }
 
+#[allow(dead_code)]
 pub fn fact(term: Term) -> Clause {
     Clause::Fact(term)
 }
 
+#[allow(dead_code)]
 pub fn rule(lhs: Term, rhs: impl Into<Expr>) -> Clause {
     Clause::Rule(lhs, rhs.into())
 }

@@ -3,11 +3,13 @@ mod tree;
 mod parser;
 mod solver;
 
+#[allow(unused_imports)]
 use tree::{ TermKind, Clause, variable, atom, compound, conjunct, fact, rule };
 use parser::{ parse };
-use solver::{ Database, Query, Partial };
+use solver::{ Database, Query };
 
 fn main() {
+    /*
     let input = "
         female(marge).
         female(lise).
@@ -18,6 +20,13 @@ fn main() {
         parent(homer, bart).
         parent(homer, lisa).
         father(X, Y) :- parent(X, Y), male(X).
+    ";
+    */
+
+    let input = "
+        not(X) :- X, !, fail.
+        thing.
+        has(thing) :- not(thing).
     ";
 
     let clauses = parse(input).unwrap();
@@ -62,7 +71,8 @@ fn main() {
 
     let db = Database::new(clauses);
 
-    let mut query = Query::new(compound("father", vec!(variable("X"), atom("bart"))));
+    //let mut query = Query::new(compound("father", vec!(variable("X"), atom("bart"))));
+    let query = Query::new(compound("has", vec!(atom("thing"))));
     let partial = query.solve(&db);
 
     println!("Result: {:?}", partial.map(|p| p.result));
