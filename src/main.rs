@@ -5,7 +5,7 @@ mod solver;
 
 #[allow(unused_imports)]
 use tree::{ TermKind, Clause, variable, atom, compound, conjunct, fact, rule };
-use parser::{ parse };
+use parser::{ parse, parse_query };
 use solver::{ Database, Query };
 
 fn main() {
@@ -21,16 +21,31 @@ fn main() {
         parent(homer, lisa).
         father(X, Y) :- parent(X, Y), male(X).
     ";
+
+    let query_string = "
+        father(X, bart).
+    ";
     */
 
+    /*
     let input = "
         not(X) :- X, !, fail.
         thing.
         has(thing) :- not(thing).
     ";
+    */
 
-    let clauses = parse(input).unwrap();
-    println!("{:?}", clauses);
+
+    let input = "
+        [thing, stuff, cat].
+        test([]).
+        test([X|Xs]) :- test(Xs).
+    ";
+
+    let query_string = "
+        test([thing, stuff, cat]).
+    ";
+
 
 
     /*
@@ -69,12 +84,27 @@ fn main() {
     ];
     */
 
+    let clauses = parse(input).unwrap();
+    println!("{:?}", clauses);
     let db = Database::new(clauses);
 
-    //let mut query = Query::new(compound("father", vec!(variable("X"), atom("bart"))));
-    let query = Query::new(compound("has", vec!(atom("thing"))));
-    let partial = query.solve(&db);
+    let query_term = parse_query(query_string).unwrap();
+    println!("{:?}", query_term);
+    let query = Query::new(query_term);
 
-    println!("Result: {:?}", partial.map(|p| p.result));
+    let mut at_rule = 0;
+    for _ in 0..5 {
+        let partial = query.solve_from(&db, at_rule);
+        match partial {
+            Some(partial) => {
+                println!("Result: \x1b[32m{}\x1b[0m", partial.result);
+                at_rule = partial.rule + 1;
+            },
+            None => {
+                println!("Result: \x1b[31mfalse\x1b[0m");
+                break;
+            },
+        }
+    }
 }
 

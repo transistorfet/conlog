@@ -2,7 +2,7 @@
 use std::str::Chars;
 use std::iter::Peekable;
 
-use crate::tree::{ Term, TermKind, Expr, ExprKind, Clause };
+use crate::tree::{ Term, TermKind, Expr, ExprKind, Clause, empty_list, cons_list };
 
 
 #[derive(Clone, Debug, PartialEq)]
@@ -10,6 +10,9 @@ pub enum Token {
     Word(String),
     OpenBracket,
     CloseBracket,
+    OpenSquare,
+    CloseSquare,
+    VerticalBar,
     Comma,
     Horn,
     Period,
@@ -51,6 +54,9 @@ impl<'input> Lexer<'input> {
             ch if is_word(ch) => Some(Token::Word(self.get_string(ch, is_word))),
             '(' => Some(Token::OpenBracket),
             ')' => Some(Token::CloseBracket),
+            '[' => Some(Token::OpenSquare),
+            ']' => Some(Token::CloseSquare),
+            '|' => Some(Token::VerticalBar),
             ',' => Some(Token::Comma),
             '.' => Some(Token::Period),
             ':' => {
@@ -126,6 +132,40 @@ fn parse_compound(input: &mut Peekable<Lexer>, name: String) -> Result<Term, Par
     }
 }
 
+fn parse_list(input: &mut Peekable<Lexer>) -> Result<Term, ParseError> {
+    if let Some(Token::CloseSquare) = input.peek() {
+        input.next();
+        return Ok(empty_list());
+    }
+
+    let mut new_list = vec!();
+    let mut terms = empty_list();
+
+    loop {
+        new_list.push(parse_term(input)?);
+
+        match expect_next(input)? {
+            Token::Comma => { /* continue the loop */ },
+            Token::CloseSquare => {
+                break;
+            },
+            Token::VerticalBar => {
+                terms = parse_term(input)?;
+                expect_token(input, Token::CloseSquare)?;
+                break;
+            },
+            token @ _ => return Err(ParseError::UnexpectedToken(token)),
+        }
+    }
+
+    // Build the cons list from the vec of items
+    for item in new_list.into_iter().rev() {
+        terms = cons_list(item, terms);
+    }
+
+    Ok(terms)
+}
+
 fn parse_comma_separated(input: &mut Peekable<Lexer>) -> Result<Vec<Term>, ParseError> {
     let mut list = vec!();
 
@@ -149,6 +189,9 @@ fn parse_term(input: &mut Peekable<Lexer>) -> Result<Term, ParseError> {
                 _ =>
                     parse_atom_or_variable(name),
             }
+        },
+        Token::OpenSquare => {
+            parse_list(input)
         },
         token => Err(ParseError::UnexpectedToken(token)),
     }
@@ -193,5 +236,17 @@ pub fn parse(text: &str) -> Result<Vec<Clause>, ParseError> {
     }
 
     Ok(clauses)
+}
+
+pub fn parse_query(text: &str) -> Result<Term, ParseError> {
+    let mut input = Lexer::new(text).peekable();
+
+    let term = parse_term(&mut input)?;
+
+    match input.next() {
+        Some(Token::Period) => Ok(term),
+        Some(token) => Err(ParseError::UnexpectedToken(token)),
+        None => Err(ParseError::UnexpectedEof),
+    }
 }
 
