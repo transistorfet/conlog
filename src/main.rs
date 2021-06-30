@@ -2,6 +2,7 @@
 mod tree;
 mod parser;
 mod solver;
+mod tests;
 
 #[allow(unused_imports)]
 use tree::{ TermKind, Clause, variable, atom, compound, conjunct, fact, rule };
