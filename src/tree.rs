@@ -39,6 +39,15 @@ impl From<Term> for Expr {
     }
 }
 
+impl TermKind {
+    pub fn get_args(&self) -> Option<&Vec<Term>> {
+        match self {
+            TermKind::Compound(_, args) => Some(args),
+            _ => None,
+        }
+    }
+}
+
 
 #[allow(dead_code)]
 pub fn variable(name: &str) -> Term {
@@ -80,10 +89,9 @@ pub fn rule(lhs: Term, rhs: impl Into<Expr>) -> Clause {
     Clause::Rule(lhs, rhs.into())
 }
 
-
-impl fmt::Display for Term {
+impl fmt::Display for TermKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match &**self {
+        match self {
             TermKind::EmptyList => write!(f, "[]"),
             TermKind::Atom(s) => write!(f, "{}", s),
             TermKind::Var(s) => write!(f, "{}", s),
@@ -102,9 +110,8 @@ impl fmt::Display for Term {
                             last = tail;
                         },
                         _ => {
-                            // This should only appear once in a well-formed tree, but we allow it to loop so as not to hide a malformed tree
-                            list += &format!("| {}", head);
-                            last = tail;
+                            list += &format!(" | {}", last);
+                            break;
                         },
                     }
                 }

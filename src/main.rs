@@ -34,8 +34,6 @@ fn main() {
         thing.
         has(thing) :- not(thing).
     ";
-    */
-
 
     let input = "
         [thing, stuff, cat].
@@ -46,44 +44,19 @@ fn main() {
     let query_string = "
         test([thing, stuff, cat]).
     ";
-
-
-
-    /*
-    let clauses = vec![
-        fact(atom("True")),
-        fact(atom("False")),
-        rule(atom("Pants"), atom("True")),
-        rule(compound("Pants", vec!(variable("X"))), variable("X")),
-    ];
-    */
-    /*
-    let clauses = vec![
-        fact(compound("female", vec!(atom("marge")))),
-        fact(compound("female", vec!(atom("lisa")))),
-        fact(compound("male", vec!(atom("homer")))),
-        fact(compound("male", vec!(atom("bart")))),
-        fact(compound("parent", vec!(atom("marge"), atom("bart")))),
-        fact(compound("parent", vec!(atom("homer"), atom("bart")))),
-        fact(compound("parent", vec!(atom("marge"), atom("lisa")))),
-        fact(compound("parent", vec!(atom("homer"), atom("lisa")))),
-        rule(compound("father", vec!(variable("X"), variable("Y"))), conjunct(compound("parent", vec!(variable("X"), variable("Y"))), compound("male", vec!(variable("X"))))),
-    ];
-
-    let mut query = Query::new(compound("father", vec!(variable("X"), atom("bart"))));
     */
 
-    /*
-    let clauses = vec![
-        fact(atom("ActionA")),
-        fact(atom("ActionB")),
-        fact(atom("ActionC")),
+    let input = "
+        not(X) :- X, !, fail.
+        delete(X, [], []).
+        delete(X, [X|Ys], Zs) :- delete(X, Ys, Zs).
+        delete(X, [Y|Ys], [Y|Zs]) :- not(equal(X, Y)), delete(X, Ys, Zs).
+    ";
 
-        fact(atom("cond1")),
-        fact(atom("cond2")),
-        rule(atom("cond2"), conjunct(atom("cond1"), atom("cond3"))),
-    ];
-    */
+    let query_string = "
+        delete(cat, [cat, thing, stuff, stuff, cat], Ys).
+    ";
+
 
     let clauses = parse(input).unwrap();
     println!("{:?}", clauses);

@@ -46,11 +46,21 @@ impl Bindings {
         bindings
     }
 
-    pub fn merge(&self, bindings: &Bindings) -> Bindings {
+    pub fn merge(&self, bindings: &Bindings) -> Option<Bindings> {
         let mut new_bindings = Bindings::empty();
         new_bindings.0.extend(self.0.clone());
-        new_bindings.0.extend(bindings.0.clone());
-        new_bindings
+        for (key, value) in bindings.0.iter() {
+            match new_bindings.0.get(key) {
+                Some(original) if !compare_term(original, value) => {
+                    println!("Already defined {:?} as {:?} but trying to set to {:?}", key, original, value);
+                    return None;
+                },
+                _ => {
+                    new_bindings.0.insert(key.clone(), value.clone());
+                },
+            }
+        }
+        Some(new_bindings)
     }
 
     pub fn substitute(&self, term: Term) -> Term {
@@ -124,6 +134,7 @@ impl Database {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
 pub struct Partial {
     pub result: Term,
     pub bindings: Bindings,
@@ -157,10 +168,21 @@ impl Query {
     }
 
     pub fn solve_from(&self, db: &Database, at: usize) -> Option<Partial> {
+        if at >= db.clauses.len() {
+            return None;
+        }
+
+        println!("Solving {:?} at {}", self.goal, at);
+        if let Some(func) = lookup_builtin(&self.goal) {
+            return func(&self.goal, &Bindings::empty(), db.clauses.len());
+        }
+
         for i in at..db.clauses.len() {
             match &db.clauses[i] {
                 Clause::Fact(t) => {
+                    println!("Unifying {} with {}", self.goal, t);
                     if let Some((n, bindings)) = unify_term(&self.goal, &t) {
+                        println!("Returning {:?} {:?}", n, bindings);
                         return Some(Partial::new(n, bindings, i));
                     }
                 },
@@ -169,9 +191,10 @@ impl Query {
                     let lhs = renaming.rename_term(lhs.clone());
                     let rhs = renaming.rename_expr(rhs.clone());
 
+                    println!("Unifying {} with {}", self.goal, lhs);
                     if let Some((_, mut bindings)) = unify_term(&self.goal, &lhs) {
                         if let Some(partial) = self._solve_expression(db, &bindings, &rhs, 0) {
-                            bindings = bindings.merge(&partial.bindings);
+                            bindings = bindings.merge(&partial.bindings)?;
                             println!("Returning {:?} {:?}", bindings.substitute(lhs.clone()), bindings);
                             return Some(Partial::new(bindings.substitute(lhs.clone()), bindings, i));
                         }
@@ -186,17 +209,13 @@ impl Query {
     fn _solve_expression(&self, db: &Database, init_bindings: &Bindings, expr: &Expr, at_rule: usize) -> Option<Partial> {
         match &**expr {
             ExprKind::Term(term) => {
-                if let Some(func) = lookup_builtin(term) {
-                    func(term, init_bindings, at_rule)
-                } else {
-                    let dependent = Query { goal: init_bindings.substitute(term.clone()) };
-                    match dependent.solve_from(db, at_rule) {
-                        Some(mut partial) => {
-                            partial.bindings = init_bindings.merge(&partial.bindings);
-                            Some(partial)
-                        },
-                        None => None,
-                    }
+                let dependent = Query { goal: init_bindings.substitute(term.clone()) };
+                match dependent.solve_from(db, at_rule) {
+                    Some(mut partial) => {
+                        partial.bindings = init_bindings.merge(&partial.bindings)?;
+                        Some(partial)
+                    },
+                    None => None,
                 }
             },
             ExprKind::Conjunct(expr1, expr2) => {
@@ -206,7 +225,7 @@ impl Query {
                         Some(partial) => {
                             // The first expr has a result, and if the second expr also has a result, then return
                             // Otherwise backtrack and try to find another solution to the first expr
-                            let bindings = init_bindings.merge(&partial.bindings);
+                            let bindings = init_bindings.merge(&partial.bindings)?;
                             if let Some(partial) = self._solve_expression(db, &bindings, expr2, 0) {
                                 return Some(partial);
                             }
@@ -217,8 +236,8 @@ impl Query {
                                 return None;
                             }
 
-                            println!("Backtracking");
                             rule = partial.rule + 1;
+                            println!("Backtracking");
                         },
                         None => {
                             println!("Out of backtrack options");
@@ -246,7 +265,6 @@ pub fn is_atom_of(expr: &Expr, expected: &str) -> bool {
 }
 
 pub fn unify_term(term1: &Term, term2: &Term) -> Option<(Term, Bindings)> {
-    println!("Check: {:?} =U= {:?}", term1, term2);
     match (&**term1, &**term2) {
         (TermKind::Atom(n), TermKind::Atom(m)) if n == m => Some((Box::new(TermKind::Atom(n.clone())), Bindings::empty())),
 
@@ -257,7 +275,7 @@ pub fn unify_term(term1: &Term, term2: &Term) -> Option<(Term, Bindings)> {
             for (a1, a2) in args1.iter().zip(args2.iter()) {
                 if let Some((n, new_bindings)) = unify_term(&a1, &a2) {
                     args.push(n);
-                    bindings = bindings.merge(&new_bindings);
+                    bindings = bindings.merge(&new_bindings)?;
                 } else {
                     return None;
                 }
@@ -270,8 +288,7 @@ pub fn unify_term(term1: &Term, term2: &Term) -> Option<(Term, Bindings)> {
         (TermKind::List(h1, t1), TermKind::List(h2, t2)) => {
             let (head, head_bindings) = unify_term(&h1, &h2)?;
             let (tail, tail_bindings) = unify_term(&t1, &t2)?;
-            println!("Unifying list {:?} to {:?}", head, tail);
-            Some((Box::new(TermKind::List(head, tail)), head_bindings.merge(&tail_bindings)))
+            Some((Box::new(TermKind::List(head, tail)), head_bindings.merge(&tail_bindings)?))
         },
 
         (TermKind::Var(n), TermKind::Var(m)) if n == m => {
@@ -279,7 +296,7 @@ pub fn unify_term(term1: &Term, term2: &Term) -> Option<(Term, Bindings)> {
         },
 
         (TermKind::Var(n), m) | (m, TermKind::Var(n)) => {
-            println!("Binding {:?} to {:?}", n, m);
+            println!("Binding {} to {}", n, m);
             Some((Box::new(m.clone()), Bindings::with(n, Box::new(m.clone()))))
         },
 
@@ -287,24 +304,77 @@ pub fn unify_term(term1: &Term, term2: &Term) -> Option<(Term, Bindings)> {
     }
 }
 
+fn compare_term(term1: &Term, term2: &Term) -> bool {
+    match (&**term1, &**term2) {
+        (TermKind::Atom(n), TermKind::Atom(m)) if n == m => true,
+        (TermKind::Compound(n, args1), TermKind::Compound(m, args2)) if n == m && args1.len() == args2.len() => {
+            for (a1, a2) in args1.iter().zip(args2.iter()) {
+                if !compare_term(a1, a2) {
+                    return false;
+                }
+            }
+            true
+        },
+        (TermKind::EmptyList, TermKind::EmptyList) => true,
+        (TermKind::List(h1, t1), TermKind::List(h2, t2)) => {
+            if !compare_term(&h1, &h2) {
+                return false;
+            }
+            compare_term(&t1, &t2)
+        },
+        (TermKind::Var(n), TermKind::Var(m)) if n == m => true,
+        _ => false,
+    }
+}
+
+
 pub fn lookup_builtin(term: &Term) -> Option<BuiltinPredicate> {
     match &**term {
         TermKind::Atom(s) => {
             match s.as_str() {
-                "!" => Some(builtin_cut),
-                "fail" => Some(builtin_fail),
+                "!" => Some(builtin_cut_0),
+                "fail" => Some(builtin_fail_0),
                 _ => None
             }
         },
+        TermKind::Compound(s, args) => {
+            match s.as_str() {
+                "equal" if args.len() == 2 => Some(builtin_equal_2),
+                "not_equal" if args.len() == 2 => Some(builtin_not_equal_2),
+                _ => None
+            }
+        }
         _ => None,
     }
 }
 
-fn builtin_cut(_term: &Term, bindings: &Bindings, at_rule: usize) -> Option<Partial> {
+fn builtin_cut_0(_term: &Term, bindings: &Bindings, at_rule: usize) -> Option<Partial> {
     Some(Partial::new(atom("true"), bindings.clone(), at_rule))
 }
 
-fn builtin_fail(_term: &Term, _bindings: &Bindings, _at_rule: usize) -> Option<Partial> {
+fn builtin_fail_0(_term: &Term, _bindings: &Bindings, _at_rule: usize) -> Option<Partial> {
     None
+}
+
+fn builtin_equal_2(term: &Term, bindings: &Bindings, at_rule: usize) -> Option<Partial> {
+    let args = term.get_args()?;
+
+    println!("Comparing {} with {}", &args[0], &args[1]);
+    if compare_term(&args[0], &args[1]) {
+        Some(Partial::new(atom("true"), bindings.clone(), at_rule))
+    } else {
+        None
+    }
+}
+
+fn builtin_not_equal_2(term: &Term, bindings: &Bindings, at_rule: usize) -> Option<Partial> {
+    let args = term.get_args()?;
+
+    println!("Comparing {} with {}", &args[0], &args[1]);
+    if !compare_term(&args[0], &args[1]) {
+        Some(Partial::new(atom("true"), bindings.clone(), at_rule))
+    } else {
+        None
+    }
 }
 
