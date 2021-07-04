@@ -1,4 +1,5 @@
 
+mod misc;
 mod tree;
 mod parser;
 mod solver;

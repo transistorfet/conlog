@@ -3,33 +3,7 @@ use std::fmt::Debug;
 use std::collections::HashMap;
 
 use crate::tree::{ Term, TermKind, Expr, ExprKind, Clause, atom };
-
-
-
-use std::fmt;
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub struct UniqueID(pub usize);
-
-static mut _NEXT_ID: usize = 10;
-
-impl UniqueID {
-    pub fn generate() -> UniqueID {
-        unsafe {
-            _NEXT_ID += 1;
-            //format!("anon{}", _next_id)
-            UniqueID(_NEXT_ID)
-        }
-    }
-}
-
-impl fmt::Display for UniqueID {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-
+use crate::misc::UniqueID;
 
 
 #[derive(Clone, Debug, PartialEq)]
@@ -81,40 +55,6 @@ impl Bindings {
                 } else {
                     TermKind::Var(n)
                 }
-            },
-        })
-    }
-
-    pub fn rename_term(&mut self, term: Term) -> Term {
-        Box::new(match *term {
-            TermKind::EmptyList => TermKind::EmptyList,
-            TermKind::Atom(n) => TermKind::Atom(n),
-            TermKind::Compound(n, args) => {
-                let args = args.iter().map(|t| self.rename_term(t.clone())).collect();
-                TermKind::Compound(n, args)
-            },
-            TermKind::List(head, tail) => {
-                TermKind::List(self.rename_term(head), self.rename_term(tail))
-            },
-            TermKind::Var(n) => {
-                if let Some(t) = self.0.get(&n) {
-                    *t.clone()
-                } else {
-                    let var = TermKind::Var(format!("{}_{}", n, UniqueID::generate()));
-                    self.0.insert(n.to_string(), Box::new(var.clone()));
-                    var
-                }
-            },
-        })
-    }
-
-    pub fn rename_expr(&mut self, expr: Expr) -> Expr {
-        Box::new(match *expr {
-            ExprKind::Term(term) => {
-                ExprKind::Term(self.rename_term(term))
-            },
-            ExprKind::Conjunct(expr1, expr2) => {
-                ExprKind::Conjunct(self.rename_expr(expr1), self.rename_expr(expr2))
             },
         })
     }
@@ -187,9 +127,9 @@ impl Query {
                     }
                 },
                 Clause::Rule(lhs, rhs) => {
-                    let mut renaming = Bindings::empty();
-                    let lhs = renaming.rename_term(lhs.clone());
-                    let rhs = renaming.rename_expr(rhs.clone());
+                    let iteration = UniqueID::generate();
+                    let lhs = rename_term(lhs.clone(), iteration);
+                    let rhs = rename_expr(rhs.clone(), iteration);
 
                     println!("Unifying {} with {}", self.goal, lhs);
                     if let Some((_, mut bindings)) = unify_term(&self.goal, &lhs) {
@@ -325,6 +265,34 @@ fn compare_term(term1: &Term, term2: &Term) -> bool {
         (TermKind::Var(n), TermKind::Var(m)) if n == m => true,
         _ => false,
     }
+}
+
+fn rename_term(term: Term, iteration: UniqueID) -> Term {
+    Box::new(match *term {
+        TermKind::EmptyList => TermKind::EmptyList,
+        TermKind::Atom(n) => TermKind::Atom(n),
+        TermKind::Compound(n, args) => {
+            let args = args.iter().map(|t| rename_term(t.clone(), iteration)).collect();
+            TermKind::Compound(n, args)
+        },
+        TermKind::List(head, tail) => {
+            TermKind::List(rename_term(head, iteration), rename_term(tail, iteration))
+        },
+        TermKind::Var(n) => {
+            TermKind::Var(format!("{}_{}", n, iteration))
+        },
+    })
+}
+
+fn rename_expr(expr: Expr, iteration: UniqueID) -> Expr {
+    Box::new(match *expr {
+        ExprKind::Term(term) => {
+            ExprKind::Term(rename_term(term, iteration))
+        },
+        ExprKind::Conjunct(expr1, expr2) => {
+            ExprKind::Conjunct(rename_expr(expr1, iteration), rename_expr(expr2, iteration))
+        },
+    })
 }
 
 
