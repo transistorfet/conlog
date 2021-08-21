@@ -2,7 +2,7 @@
 use std::fmt::Debug;
 use std::collections::HashMap;
 
-use crate::tree::{ Term, TermKind, Expr, ExprKind, Clause, atom };
+use crate::tree::{ Term, TermKind, Expr, ExprKind, Clause, atom, integer };
 use crate::misc::UniqueID;
 
 
@@ -41,6 +41,7 @@ impl Bindings {
         Box::new(match *term {
             TermKind::EmptyList => TermKind::EmptyList,
             TermKind::Atom(n) => TermKind::Atom(n),
+            TermKind::Integer(num) => TermKind::Integer(num),
             TermKind::Compound(n, args) => {
                 let args = args.iter().map(|t| self.substitute(t.clone())).collect();
                 TermKind::Compound(n, args)
@@ -120,10 +121,13 @@ impl Query {
         for i in at..db.clauses.len() {
             match &db.clauses[i] {
                 Clause::Fact(t) => {
-                    println!("Unifying {} with {}", self.goal, t);
+                    let iteration = UniqueID::generate();
+                    let t = rename_term(t.clone(), iteration);
+
+                    println!("Unifying fact {} with {}", self.goal, t);
                     if let Some((n, bindings)) = unify_term(&self.goal, &t) {
                         println!("Returning {:?} {:?}", n, bindings);
-                        return Some(Partial::new(n, bindings, i));
+                        return Some(Partial::new(bindings.substitute(n), bindings, i));
                     }
                 },
                 Clause::Rule(lhs, rhs) => {
@@ -131,7 +135,7 @@ impl Query {
                     let lhs = rename_term(lhs.clone(), iteration);
                     let rhs = rename_expr(rhs.clone(), iteration);
 
-                    println!("Unifying {} with {}", self.goal, lhs);
+                    println!("Unifying rule {} with {}", self.goal, lhs);
                     if let Some((_, mut bindings)) = unify_term(&self.goal, &lhs) {
                         if let Some(partial) = self._solve_expression(db, &bindings, &rhs, 0) {
                             bindings = bindings.merge(&partial.bindings)?;
@@ -190,6 +194,7 @@ impl Query {
     }
 }
 
+
 pub fn is_atom_of(expr: &Expr, expected: &str) -> bool {
     if let ExprKind::Term(term) = &**expr {
         match &**term {
@@ -205,8 +210,11 @@ pub fn is_atom_of(expr: &Expr, expected: &str) -> bool {
 }
 
 pub fn unify_term(term1: &Term, term2: &Term) -> Option<(Term, Bindings)> {
+    //println!("Unifying term {:?} and {:?}", term1, term2);
     match (&**term1, &**term2) {
         (TermKind::Atom(n), TermKind::Atom(m)) if n == m => Some((Box::new(TermKind::Atom(n.clone())), Bindings::empty())),
+
+        (TermKind::Integer(n), TermKind::Integer(m)) if n == m => Some((Box::new(TermKind::Integer(n.clone())), Bindings::empty())),
 
         (TermKind::Compound(n, args1), TermKind::Compound(m, args2)) if n == m && args1.len() == args2.len() => {
             let mut args = vec!();
@@ -244,9 +252,21 @@ pub fn unify_term(term1: &Term, term2: &Term) -> Option<(Term, Bindings)> {
     }
 }
 
+fn simplify_term(term: &Term, bindings: &Bindings, at_rule: usize) -> Option<Partial> {
+    if let Some(func) = lookup_builtin(term) {
+        match func(term, bindings, at_rule) {
+            Some(partial) => simplify_term(&partial.result, &partial.bindings, partial.rule),
+            None => None,
+        }
+    } else {
+        Some(Partial::new(term.clone(), bindings.clone(), at_rule))
+    }
+}
+
 fn compare_term(term1: &Term, term2: &Term) -> bool {
     match (&**term1, &**term2) {
         (TermKind::Atom(n), TermKind::Atom(m)) if n == m => true,
+        (TermKind::Integer(n), TermKind::Integer(m)) if n == m => true,
         (TermKind::Compound(n, args1), TermKind::Compound(m, args2)) if n == m && args1.len() == args2.len() => {
             for (a1, a2) in args1.iter().zip(args2.iter()) {
                 if !compare_term(a1, a2) {
@@ -271,6 +291,7 @@ fn rename_term(term: Term, iteration: UniqueID) -> Term {
     Box::new(match *term {
         TermKind::EmptyList => TermKind::EmptyList,
         TermKind::Atom(n) => TermKind::Atom(n),
+        TermKind::Integer(n) => TermKind::Integer(n),
         TermKind::Compound(n, args) => {
             let args = args.iter().map(|t| rename_term(t.clone(), iteration)).collect();
             TermKind::Compound(n, args)
@@ -307,8 +328,12 @@ pub fn lookup_builtin(term: &Term) -> Option<BuiltinPredicate> {
         },
         TermKind::Compound(s, args) => {
             match s.as_str() {
-                "equal" if args.len() == 2 => Some(builtin_equal_2),
-                "not_equal" if args.len() == 2 => Some(builtin_not_equal_2),
+                "is" if args.len() == 2 => Some(builtin_is_2),
+                "=" if args.len() == 2 => Some(builtin_equal_2),
+                "\\=" if args.len() == 2 => Some(builtin_not_equal_2),
+                "<" if args.len() == 2 => Some(builtin_less_than_2),
+                ">=" if args.len() == 2 => Some(builtin_greater_than_or_equal_2),
+                "-" if args.len() == 2 => Some(builtin_subtract_2),
                 _ => None
             }
         }
@@ -322,6 +347,20 @@ fn builtin_cut_0(_term: &Term, bindings: &Bindings, at_rule: usize) -> Option<Pa
 
 fn builtin_fail_0(_term: &Term, _bindings: &Bindings, _at_rule: usize) -> Option<Partial> {
     None
+}
+
+fn builtin_is_2(term: &Term, bindings: &Bindings, at_rule: usize) -> Option<Partial> {
+    let args = term.get_args()?;
+
+    let rhs = simplify_term(&args[1], bindings, at_rule).unwrap();
+    println!("{:?} {:?}", args[0], rhs.result);
+    match unify_term(&args[0], &rhs.result) {
+        Some((result, newbindings)) => {
+            let bindings = newbindings.merge(&bindings)?;
+            Some(Partial::new(result, bindings, at_rule))
+        },
+        None => None,
+    }
 }
 
 fn builtin_equal_2(term: &Term, bindings: &Bindings, at_rule: usize) -> Option<Partial> {
@@ -343,6 +382,36 @@ fn builtin_not_equal_2(term: &Term, bindings: &Bindings, at_rule: usize) -> Opti
         Some(Partial::new(atom("true"), bindings.clone(), at_rule))
     } else {
         None
+    }
+}
+
+fn builtin_less_than_2(term: &Term, bindings: &Bindings, at_rule: usize) -> Option<Partial> {
+    let args = term.get_args()?;
+
+    println!("Comparing {} with {}", &args[0], &args[1]);
+    match (&*args[0], &*args[1]) {
+        (TermKind::Integer(n), TermKind::Integer(m)) if n < m => Some(Partial::new(atom("true"), bindings.clone(), at_rule)),
+        _ => None
+    }
+}
+
+fn builtin_greater_than_or_equal_2(term: &Term, bindings: &Bindings, at_rule: usize) -> Option<Partial> {
+    let args = term.get_args()?;
+
+    println!("Comparing {} with {}", &args[0], &args[1]);
+    match (&*args[0], &*args[1]) {
+        (TermKind::Integer(n), TermKind::Integer(m)) if n >= m => Some(Partial::new(atom("true"), bindings.clone(), at_rule)),
+        _ => None
+    }
+}
+
+fn builtin_subtract_2(term: &Term, bindings: &Bindings, at_rule: usize) -> Option<Partial> {
+    let args = term.get_args()?;
+
+    println!("Subtracting {} with {}", &args[0], &args[1]);
+    match (&*args[0], &*args[1]) {
+        (TermKind::Integer(n), TermKind::Integer(m)) => Some(Partial::new(integer(n - m), bindings.clone(), at_rule)),
+        _ => None
     }
 }
 

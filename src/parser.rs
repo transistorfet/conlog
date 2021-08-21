@@ -4,10 +4,12 @@ use std::iter::Peekable;
 
 use crate::tree::{ Term, TermKind, Expr, ExprKind, Clause, empty_list, cons_list };
 
+const OPERATORS: [&str; 9] = [ ",", "=", "\\=", ">", ">=", "<", "<=", "+", "-" ];
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Token {
     Word(String),
+    BinaryOp(String),
     OpenBracket,
     CloseBracket,
     OpenSquare,
@@ -31,22 +33,6 @@ impl<'input> Lexer<'input> {
         }
     }
 
-    pub fn eat_whitespace(&mut self) {
-        while self.chars.next_if(|ch| is_whitespace(*ch)).is_some() { }
-    }
-
-    pub fn get_string(&mut self, first: char, f: impl Fn(char) -> bool) -> String {
-        let mut text = first.to_string();
-        loop {
-            if let Some(ch) = self.chars.next_if(|ch| f(*ch)) {
-                text.push(ch);
-            } else {
-                break;
-            }
-        }
-        text
-    }
-
     pub fn get_token(&mut self) -> Option<Token> {
         self.eat_whitespace();
 
@@ -57,17 +43,32 @@ impl<'input> Lexer<'input> {
             '[' => Some(Token::OpenSquare),
             ']' => Some(Token::CloseSquare),
             '|' => Some(Token::VerticalBar),
-            ',' => Some(Token::Comma),
             '.' => Some(Token::Period),
-            ':' => {
-                match self.chars.next() {
-                    Some(ch) if ch == '-' => Some(Token::Horn),
-                    Some(ch) => Some(Token::Error(ch)),
-                    None => Some(Token::Error(' ')),
+            ',' => Some(Token::Comma),
+            ch => {
+                match self.get_string(ch, is_operator) {
+                    op if op.as_str() == ":-" => Some(Token::Horn),
+                    op if OPERATORS.iter().any(|s| *s == op) => Some(Token::BinaryOp(op)),
+                    _ => Some(Token::Error(ch)),
                 }
             },
-            ch @ _ => Some(Token::Error(ch)),
         }
+    }
+
+    fn eat_whitespace(&mut self) {
+        while self.chars.next_if(|ch| is_whitespace(*ch)).is_some() { }
+    }
+
+    fn get_string(&mut self, first: char, f: impl Fn(char) -> bool) -> String {
+        let mut text = first.to_string();
+        loop {
+            if let Some(ch) = self.chars.next_if(|ch| f(*ch)) {
+                text.push(ch);
+            } else {
+                break;
+            }
+        }
+        text
     }
 }
 
@@ -77,6 +78,13 @@ fn is_whitespace(ch: char) -> bool {
 
 fn is_word(ch: char) -> bool {
     (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || (ch == '_') || (ch == '!')
+}
+
+fn is_operator(ch: char) -> bool {
+    match ch {
+        ',' | ';' | ':' | '=' | '>' | '<' | '+' | '-' | '*' | '\\' | '!' => true,
+        _ => false,
+    }
 }
 
 impl<'input> Iterator for Lexer<'input> {
@@ -112,8 +120,21 @@ fn expect_token(input: &mut Peekable<Lexer>, token: Token) -> Result<(), ParseEr
     }
 }
 
+fn parse_number(name: String) -> Result<i64, ParseError> {
+    let (num, _) = name.chars().rev().fold((0, 1), |acc, ch| {
+        match ch {
+            '-' => (acc.0 * -1, acc.1),
+            _ => ((ch.to_digit(10).unwrap() as i64 * acc.1) + acc.0, acc.1 * 10)
+        }
+    });
+    Ok(num)
+}
+
 fn parse_atom_or_variable(name: String) -> Result<Term, ParseError> {
     match name.chars().nth(0) {
+        Some(ch) if (ch >= '0' && ch <= '9') || ch == '-' => {
+            Ok(Box::new(TermKind::Integer(parse_number(name)?)))
+        },
         Some(ch) if ch >= 'A' && ch <= 'Z' =>
             Ok(Box::new(TermKind::Var(name))),
         _ =>
@@ -181,7 +202,7 @@ fn parse_comma_separated(input: &mut Peekable<Lexer>) -> Result<Vec<Term>, Parse
 }
 
 fn parse_term(input: &mut Peekable<Lexer>) -> Result<Term, ParseError> {
-    match expect_next(input)? {
+    let term = match expect_next(input)? {
         Token::Word(name) => {
             match input.peek() {
                 Some(Token::OpenBracket) =>
@@ -194,6 +215,15 @@ fn parse_term(input: &mut Peekable<Lexer>) -> Result<Term, ParseError> {
             parse_list(input)
         },
         token => Err(ParseError::UnexpectedToken(token)),
+    };
+
+    match input.peek() {
+        Some(Token::BinaryOp(name)) => {
+            let name = name.to_string();
+            input.next();
+            Ok(Box::new(TermKind::Compound(name, vec!(term?, parse_term(input)?))))
+        },
+        _ => term,
     }
 }
 

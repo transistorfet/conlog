@@ -77,13 +77,41 @@ mod tests {
 	let partial = solve_program_with_query("
         delete(X, [], []).
         delete(X, [X|Ys], Zs) :-  delete(X, Ys, Zs).
-        delete(X, [Y|Ys], [Y|Zs]) :- not_equal(X, Y), delete(X, Ys, Zs).
+        delete(X, [Y|Ys], [Y|Zs]) :- X \\= Y, delete(X, Ys, Zs).
         ",
         "
         delete(cat, [cat, thing, stuff, stuff, cat], Ys).
         ");
 
 	assert_eq!(format!("{}", partial.result), "delete(cat, [cat, thing, stuff, stuff, cat], [thing, stuff, stuff])");
+    }
+
+    #[test]
+    fn list_reverse_test() {
+	let partial = solve_program_with_query("
+        reverse(X, Y) :- reverse(X, Y, []).
+        reverse([], Z, Z).
+        reverse([H|T], Z, Acc) :- reverse(T, Z, [H|Acc]).
+        ",
+        "
+        reverse([cat, dog, bird], X).
+        ");
+
+	assert_eq!(format!("{}", partial.result), "reverse([cat, dog, bird], [bird, dog, cat])");
+    }
+
+    #[test]
+    fn integer_highest_test() {
+	let partial = solve_program_with_query("
+        highest(X, [X|[]]).
+        highest(X, [X|Xs]) :- highest(Y, Xs), X >= Y.
+        highest(Y, [X|Xs]) :- highest(Y, Xs), X < Y.
+        ",
+        "
+        highest(X, [1, 8, 904, 234, 42]).
+        ");
+
+	assert_eq!(format!("{}", partial.result), "highest(904, [1, 8, 904, 234, 42])");
     }
 }
 

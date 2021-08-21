@@ -47,6 +47,7 @@ fn main() {
     ";
     */
 
+    /*
     let input = "
         not(X) :- X, !, fail.
         delete(X, [], []).
@@ -56,6 +57,16 @@ fn main() {
 
     let query_string = "
         delete(cat, [cat, thing, stuff, stuff, cat], Ys).
+    ";
+    */
+
+    let input = "
+        nth([X|Xs], 0, X).
+        nth([S|Xs], N, Y) :- is(M, N - 1), nth(Xs, M, Y).
+    ";
+
+    let query_string = "
+        nth([1, 2, 3, 4], 2, X).
     ";
 
 
