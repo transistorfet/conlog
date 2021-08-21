@@ -1,4 +1,9 @@
 
+use std::io;
+use std::env;
+use std::fs::File;
+use std::io::{ Read, Write };
+
 mod misc;
 mod tree;
 mod parser;
@@ -8,9 +13,9 @@ mod tests;
 #[allow(unused_imports)]
 use tree::{ TermKind, Clause, variable, atom, compound, conjunct, fact, rule };
 use parser::{ parse, parse_query };
-use solver::{ Database, Query };
+use solver::{ Database, Query, Partial };
 
-fn main() {
+fn run_default() {
     /*
     let input = "
         female(marge).
@@ -91,6 +96,53 @@ fn main() {
                 break;
             },
         }
+    }
+}
+
+fn load_database(filename: &str) -> Database {
+    let mut file = File::open(filename).unwrap();
+    let mut contents = String::new();
+    file.read_to_string(&mut contents).unwrap();
+
+    let clauses = parse(&contents).unwrap();
+    println!("{:?}", clauses);
+    Database::new(clauses)
+}
+
+fn run_query(db: &Database, query: &str) -> Option<Partial> {
+    let query_term = parse_query(query).ok()?;
+    println!("{:?}", query_term);
+    let query = Query::new(query_term);
+    query.solve(db)
+}
+
+fn repl(db: Database) {
+    loop {
+        let mut input = String::new();
+        io::stdout().write(b"?- ").unwrap();
+        io::stdout().flush().unwrap();
+        match io::stdin().read_line(&mut input) {
+            Ok(_) => {
+                match run_query(&db, &input) {
+                    Some(partial) =>
+                        println!("Result: \x1b[32m{}\x1b[0m", partial.result),
+                    None =>
+                        println!("Error"),
+                }
+            }
+            Err(err) => println!("IO Error: {:?}", err),
+        }
+    }
+}
+
+fn main() {
+    let args: Vec<String> = env::args().collect();
+
+    if args.len() <= 1 {
+        run_default();
+    } else {
+        let db = load_database(&args[1]);
+        repl(db);
     }
 }
 
