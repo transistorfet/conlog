@@ -15,8 +15,6 @@ pub enum Token {
     Comma,
     Horn,
     Period,
-
-    Error(char),
 }
 
 pub struct Lexer<'input> {
@@ -34,6 +32,11 @@ impl<'input> Lexer<'input> {
         self.eat_whitespace();
 
         match self.chars.next()? {
+            '%' => {
+                // Ignore comment lines, which start with a '%' character
+                while self.chars.next_if(|ch| *ch != '\n').is_some() { }
+                self.get_token()
+            },
             ch if is_word(ch) => Some(Token::Word(self.get_string(ch, is_word))),
             '(' => Some(Token::OpenBracket),
             ')' => Some(Token::CloseBracket),
@@ -78,7 +81,7 @@ fn is_word(ch: char) -> bool {
 
 fn is_operator(ch: char) -> bool {
     match ch {
-        ',' | ';' | ':' | '=' | '>' | '<' | '+' | '-' | '*' | '\\' | '/' | '!' | '#' | '$' | '%' | '?' | '@' | '^' => true,
+        ';' | ':' | '=' | '>' | '<' | '+' | '-' | '*' | '\\' | '/' | '!' | '#' | '$' | '?' | '@' | '^' => true,
         _ => false,
     }
 }
