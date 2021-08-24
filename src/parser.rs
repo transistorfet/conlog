@@ -4,12 +4,9 @@ use std::iter::Peekable;
 
 use crate::tree::{ Term, TermKind, Expr, ExprKind, Clause, empty_list, cons_list };
 
-const OPERATORS: [&str; 9] = [ ",", "=", "\\=", ">", ">=", "<", "<=", "+", "-" ];
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum Token {
     Word(String),
-    BinaryOp(String),
     OpenBracket,
     CloseBracket,
     OpenSquare,
@@ -48,8 +45,7 @@ impl<'input> Lexer<'input> {
             ch => {
                 match self.get_string(ch, is_operator) {
                     op if op.as_str() == ":-" => Some(Token::Horn),
-                    op if OPERATORS.iter().any(|s| *s == op) => Some(Token::BinaryOp(op)),
-                    _ => Some(Token::Error(ch)),
+                    op => Some(Token::Word(op)),
                 }
             },
         }
@@ -77,12 +73,12 @@ fn is_whitespace(ch: char) -> bool {
 }
 
 fn is_word(ch: char) -> bool {
-    (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || (ch == '_') || (ch == '!')
+    (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || (ch == '_')
 }
 
 fn is_operator(ch: char) -> bool {
     match ch {
-        ',' | ';' | ':' | '=' | '>' | '<' | '+' | '-' | '*' | '\\' | '!' => true,
+        ',' | ';' | ':' | '=' | '>' | '<' | '+' | '-' | '*' | '\\' | '/' | '!' | '#' | '$' | '%' | '?' | '@' | '^' => true,
         _ => false,
     }
 }
@@ -201,6 +197,8 @@ fn parse_comma_separated(input: &mut Peekable<Lexer>) -> Result<Vec<Term>, Parse
     Ok(list)
 }
 
+const OPERATORS: [&str; 10] = [ ",", "=", "\\=", ">", ">=", "<", "<=", "+", "-", "is" ];
+
 fn parse_term(input: &mut Peekable<Lexer>) -> Result<Term, ParseError> {
     let term = match expect_next(input)? {
         Token::Word(name) => {
@@ -218,7 +216,7 @@ fn parse_term(input: &mut Peekable<Lexer>) -> Result<Term, ParseError> {
     };
 
     match input.peek() {
-        Some(Token::BinaryOp(name)) => {
+        Some(Token::Word(name)) if OPERATORS.iter().any(|s| *s == name) => {
             let name = name.to_string();
             input.next();
             Ok(Box::new(TermKind::Compound(name, vec!(term?, parse_term(input)?))))

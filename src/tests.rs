@@ -113,5 +113,18 @@ mod tests {
 
 	assert_eq!(format!("{}", partial.result), "highest(904, [1, 8, 904, 234, 42])");
     }
+
+    #[test]
+    fn integer_nth() {
+	let partial = solve_program_with_query("
+        nth([X|Xs], 0, X).
+        nth([S|Xs], N, Y) :- M is N - 1, nth(Xs, M, Y). 
+        ",
+        "
+        nth([1, 8, 904, 234, 42], 3, X).
+        ");
+
+	assert_eq!(format!("{}", partial.result), "nth([1, 8, 904, 234, 42], 3, 234)");
+    }
 }
 
