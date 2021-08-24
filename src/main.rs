@@ -119,7 +119,7 @@ fn run_query(db: &Database, query: &str) -> Option<Partial> {
 fn repl(db: Database) {
     loop {
         let mut input = String::new();
-        io::stdout().write(b"?- ").unwrap();
+        io::stdout().write_all(b"?- ").unwrap();
         io::stdout().flush().unwrap();
         match io::stdin().read_line(&mut input) {
             Ok(_) => {

@@ -60,12 +60,8 @@ impl<'input> Lexer<'input> {
 
     fn get_string(&mut self, first: char, f: impl Fn(char) -> bool) -> String {
         let mut text = first.to_string();
-        loop {
-            if let Some(ch) = self.chars.next_if(|ch| f(*ch)) {
-                text.push(ch);
-            } else {
-                break;
-            }
+        while let Some(ch) = self.chars.next_if(|ch| f(*ch)) {
+            text.push(ch);
         }
         text
     }
@@ -76,7 +72,7 @@ fn is_whitespace(ch: char) -> bool {
 }
 
 fn is_word(ch: char) -> bool {
-    (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || (ch == '_')
+    ('a'..='z').contains(&ch) || ('A'..='Z').contains(&ch) || ('0'..='0').contains(&ch) || (ch == '_')
 }
 
 fn is_operator(ch: char) -> bool {
@@ -103,14 +99,12 @@ pub enum ParseError {
     UnexpectedToken(Token),
 }
 
-#[must_use]
 #[inline(always)]
 fn expect_next(input: &mut Peekable<Lexer>) -> Result<Token, ParseError> {
     input.next().ok_or(ParseError::UnexpectedEof)
 }
 
 #[inline]
-#[must_use]
 fn expect_token(input: &mut Peekable<Lexer>, token: Token) -> Result<(), ParseError> {
     let next = expect_next(input)?;
     match next == token {
@@ -122,7 +116,7 @@ fn expect_token(input: &mut Peekable<Lexer>, token: Token) -> Result<(), ParseEr
 fn parse_number(name: String) -> Result<i64, ParseError> {
     let (num, _) = name.chars().rev().fold((0, 1), |acc, ch| {
         match ch {
-            '-' => (acc.0 * -1, acc.1),
+            '-' => (-acc.0, acc.1),
             _ => ((ch.to_digit(10).unwrap() as i64 * acc.1) + acc.0, acc.1 * 10)
         }
     });
@@ -130,11 +124,11 @@ fn parse_number(name: String) -> Result<i64, ParseError> {
 }
 
 fn parse_atom_or_variable(name: String) -> Result<Term, ParseError> {
-    match name.chars().nth(0) {
-        Some(ch) if (ch >= '0' && ch <= '9') || ch == '-' => {
+    match name.chars().next() {
+        Some(ch) if ('0'..='9').contains(&ch) || ch == '-' => {
             Ok(Box::new(TermKind::Integer(parse_number(name)?)))
         },
-        Some(ch) if ch >= 'A' && ch <= 'Z' =>
+        Some(ch) if ('A'..='Z').contains(&ch) =>
             Ok(Box::new(TermKind::Var(name))),
         _ =>
             Ok(Box::new(TermKind::Atom(name))),
@@ -174,7 +168,7 @@ fn parse_list(input: &mut Peekable<Lexer>) -> Result<Term, ParseError> {
                 expect_token(input, Token::CloseSquare)?;
                 break;
             },
-            token @ _ => return Err(ParseError::UnexpectedToken(token)),
+            token => return Err(ParseError::UnexpectedToken(token)),
         }
     }
 

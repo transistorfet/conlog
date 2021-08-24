@@ -70,7 +70,7 @@ pub struct Database {
 impl Database {
     pub fn new(clauses: Vec<Clause>) -> Self {
         Database {
-            clauses: clauses,
+            clauses,
         }
     }
 }
@@ -85,9 +85,9 @@ pub struct Partial {
 impl Partial {
     pub fn new(result: Term, bindings: Bindings, rule: usize) -> Partial {
         Partial {
-            result: result,
-            bindings: bindings,
-            rule: rule,
+            result,
+            bindings,
+            rule,
         }
     }
 }
@@ -206,7 +206,7 @@ pub fn is_atom_of(expr: &Expr, expected: &str) -> bool {
             _ => { },
         }
     }
-    return false;
+    false
 }
 
 pub fn unify_term(term1: &Term, term2: &Term) -> Option<(Term, Bindings)> {
@@ -214,14 +214,14 @@ pub fn unify_term(term1: &Term, term2: &Term) -> Option<(Term, Bindings)> {
     match (&**term1, &**term2) {
         (TermKind::Atom(n), TermKind::Atom(m)) if n == m => Some((Box::new(TermKind::Atom(n.clone())), Bindings::empty())),
 
-        (TermKind::Integer(n), TermKind::Integer(m)) if n == m => Some((Box::new(TermKind::Integer(n.clone())), Bindings::empty())),
+        (TermKind::Integer(n), TermKind::Integer(m)) if n == m => Some((Box::new(TermKind::Integer(*n)), Bindings::empty())),
 
         (TermKind::Compound(n, args1), TermKind::Compound(m, args2)) if n == m && args1.len() == args2.len() => {
             let mut args = vec!();
             let mut bindings = Bindings::empty();
 
             for (a1, a2) in args1.iter().zip(args2.iter()) {
-                if let Some((n, new_bindings)) = unify_term(&a1, &a2) {
+                if let Some((n, new_bindings)) = unify_term(a1, a2) {
                     args.push(n);
                     bindings = bindings.merge(&new_bindings)?;
                 } else {
@@ -234,8 +234,8 @@ pub fn unify_term(term1: &Term, term2: &Term) -> Option<(Term, Bindings)> {
         (TermKind::EmptyList, TermKind::EmptyList) => Some((Box::new(TermKind::EmptyList), Bindings::empty())),
 
         (TermKind::List(h1, t1), TermKind::List(h2, t2)) => {
-            let (head, head_bindings) = unify_term(&h1, &h2)?;
-            let (tail, tail_bindings) = unify_term(&t1, &t2)?;
+            let (head, head_bindings) = unify_term(h1, h2)?;
+            let (tail, tail_bindings) = unify_term(t1, t2)?;
             Some((Box::new(TermKind::List(head, tail)), head_bindings.merge(&tail_bindings)?))
         },
 
@@ -277,10 +277,10 @@ fn compare_term(term1: &Term, term2: &Term) -> bool {
         },
         (TermKind::EmptyList, TermKind::EmptyList) => true,
         (TermKind::List(h1, t1), TermKind::List(h2, t2)) => {
-            if !compare_term(&h1, &h2) {
+            if !compare_term(h1, h2) {
                 return false;
             }
-            compare_term(&t1, &t2)
+            compare_term(t1, t2)
         },
         (TermKind::Var(n), TermKind::Var(m)) if n == m => true,
         _ => false,
@@ -356,7 +356,7 @@ fn builtin_is_2(term: &Term, bindings: &Bindings, at_rule: usize) -> Option<Part
     println!("{:?} {:?}", args[0], rhs.result);
     match unify_term(&args[0], &rhs.result) {
         Some((result, newbindings)) => {
-            let bindings = newbindings.merge(&bindings)?;
+            let bindings = newbindings.merge(bindings)?;
             Some(Partial::new(result, bindings, at_rule))
         },
         None => None,
