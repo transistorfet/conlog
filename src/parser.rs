@@ -72,7 +72,7 @@ fn is_whitespace(ch: char) -> bool {
 }
 
 fn is_word(ch: char) -> bool {
-    ('a'..='z').contains(&ch) || ('A'..='Z').contains(&ch) || ('0'..='0').contains(&ch) || (ch == '_')
+    ('a'..='z').contains(&ch) || ('A'..='Z').contains(&ch) || ('0'..='9').contains(&ch) || (ch == '_')
 }
 
 fn is_operator(ch: char) -> bool {
