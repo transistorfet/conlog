@@ -10,6 +10,7 @@ pub enum TermKind {
     Var(String),
     Atom(String),
     Integer(i64),
+    String(String),
     Compound(String, Vec<Term>),
     List(Term, Term),
 }
@@ -66,6 +67,11 @@ pub fn integer(num: i64) -> Term {
 }
 
 #[allow(dead_code)]
+pub fn string(string: String) -> Term {
+    Box::new(TermKind::String(string))
+}
+
+#[allow(dead_code)]
 pub fn compound(name: &str, args: Vec<Term>) -> Term {
     Box::new(TermKind::Compound(name.to_string(), args))
 }
@@ -103,6 +109,7 @@ impl fmt::Display for TermKind {
             TermKind::Atom(s) => write!(f, "{}", s),
             TermKind::Var(s) => write!(f, "{}", s),
             TermKind::Integer(num) => write!(f, "{}", num),
+            TermKind::String(string) => write!(f, "\"{}\"", string),
             TermKind::Compound(s, args) => {
                 let args = args.iter().map(|arg| format!("{}", arg)).collect::<Vec<String>>().join(", ");
                 write!(f, "{}({})", s, args)

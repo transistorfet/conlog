@@ -42,6 +42,7 @@ impl Bindings {
             TermKind::EmptyList => TermKind::EmptyList,
             TermKind::Atom(n) => TermKind::Atom(n),
             TermKind::Integer(num) => TermKind::Integer(num),
+            TermKind::String(string) => TermKind::String(string),
             TermKind::Compound(n, args) => {
                 let args = args.iter().map(|t| self.substitute(t.clone())).collect();
                 TermKind::Compound(n, args)
@@ -216,6 +217,8 @@ pub fn unify_term(term1: &Term, term2: &Term) -> Option<(Term, Bindings)> {
 
         (TermKind::Integer(n), TermKind::Integer(m)) if n == m => Some((Box::new(TermKind::Integer(*n)), Bindings::empty())),
 
+        (TermKind::String(n), TermKind::String(m)) if n == m => Some((Box::new(TermKind::String(n.clone())), Bindings::empty())),
+
         (TermKind::Compound(n, args1), TermKind::Compound(m, args2)) if n == m && args1.len() == args2.len() => {
             let mut args = vec!();
             let mut bindings = Bindings::empty();
@@ -267,6 +270,7 @@ fn compare_term(term1: &Term, term2: &Term) -> bool {
     match (&**term1, &**term2) {
         (TermKind::Atom(n), TermKind::Atom(m)) if n == m => true,
         (TermKind::Integer(n), TermKind::Integer(m)) if n == m => true,
+        (TermKind::String(n), TermKind::String(m)) if n == m => true,
         (TermKind::Compound(n, args1), TermKind::Compound(m, args2)) if n == m && args1.len() == args2.len() => {
             for (a1, a2) in args1.iter().zip(args2.iter()) {
                 if !compare_term(a1, a2) {
@@ -292,6 +296,7 @@ fn rename_term(term: Term, iteration: UniqueID) -> Term {
         TermKind::EmptyList => TermKind::EmptyList,
         TermKind::Atom(n) => TermKind::Atom(n),
         TermKind::Integer(n) => TermKind::Integer(n),
+        TermKind::String(n) => TermKind::String(n),
         TermKind::Compound(n, args) => {
             let args = args.iter().map(|t| rename_term(t.clone(), iteration)).collect();
             TermKind::Compound(n, args)
@@ -333,6 +338,7 @@ pub fn lookup_builtin(term: &Term) -> Option<BuiltinPredicate> {
                 "\\=" if args.len() == 2 => Some(builtin_not_equal_2),
                 "<" if args.len() == 2 => Some(builtin_less_than_2),
                 ">=" if args.len() == 2 => Some(builtin_greater_than_or_equal_2),
+                "+" if args.len() == 2 => Some(builtin_add_2),
                 "-" if args.len() == 2 => Some(builtin_subtract_2),
                 _ => None
             }
@@ -401,6 +407,16 @@ fn builtin_greater_than_or_equal_2(term: &Term, bindings: &Bindings, at_rule: us
     println!("Comparing {} with {}", &args[0], &args[1]);
     match (&*args[0], &*args[1]) {
         (TermKind::Integer(n), TermKind::Integer(m)) if n >= m => Some(Partial::new(atom("true"), bindings.clone(), at_rule)),
+        _ => None
+    }
+}
+
+fn builtin_add_2(term: &Term, bindings: &Bindings, at_rule: usize) -> Option<Partial> {
+    let args = term.get_args()?;
+
+    println!("Adding {} with {}", &args[0], &args[1]);
+    match (&*args[0], &*args[1]) {
+        (TermKind::Integer(n), TermKind::Integer(m)) => Some(Partial::new(integer(n + m), bindings.clone(), at_rule)),
         _ => None
     }
 }

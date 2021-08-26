@@ -7,6 +7,7 @@ use crate::tree::{ Term, TermKind, Expr, ExprKind, Clause, empty_list, cons_list
 #[derive(Clone, Debug, PartialEq)]
 pub enum Token {
     Word(String),
+    String(String),
     OpenBracket,
     CloseBracket,
     OpenSquare,
@@ -32,12 +33,6 @@ impl<'input> Lexer<'input> {
         self.eat_whitespace();
 
         match self.chars.next()? {
-            '%' => {
-                // Ignore comment lines, which start with a '%' character
-                while self.chars.next_if(|ch| *ch != '\n').is_some() { }
-                self.get_token()
-            },
-            ch if is_word(ch) => Some(Token::Word(self.get_string(ch, is_word))),
             '(' => Some(Token::OpenBracket),
             ')' => Some(Token::CloseBracket),
             '[' => Some(Token::OpenSquare),
@@ -45,8 +40,31 @@ impl<'input> Lexer<'input> {
             '|' => Some(Token::VerticalBar),
             '.' => Some(Token::Period),
             ',' => Some(Token::Comma),
+
+            '\'' => {
+                let string = self.get_string(None, |ch| ch != '\'');
+                self.chars.next();      // Eat the remaining \' character
+                Some(Token::Word(string))
+            },
+
+            '\"' => {
+                let string = self.get_string(None, |ch| ch != '\"');
+                self.chars.next();      // Eat the remaining \" character
+                Some(Token::String(string))
+            },
+
+            '%' => {
+                // Ignore comment lines, which start with a '%' character
+                while self.chars.next_if(|ch| *ch != '\n').is_some() { }
+                self.get_token()
+            },
+
+            ch if is_word(ch) => {
+                Some(Token::Word(self.get_string(Some(ch), is_word)))
+            },
+
             ch => {
-                match self.get_string(ch, is_operator) {
+                match self.get_string(Some(ch), is_operator) {
                     op if op.as_str() == ":-" => Some(Token::Horn),
                     op => Some(Token::Word(op)),
                 }
@@ -58,8 +76,8 @@ impl<'input> Lexer<'input> {
         while self.chars.next_if(|ch| is_whitespace(*ch)).is_some() { }
     }
 
-    fn get_string(&mut self, first: char, f: impl Fn(char) -> bool) -> String {
-        let mut text = first.to_string();
+    fn get_string(&mut self, first: Option<char>, f: impl Fn(char) -> bool) -> String {
+        let mut text = first.map(|s| s.to_string()).unwrap_or(String::new());
         while let Some(ch) = self.chars.next_if(|ch| f(*ch)) {
             text.push(ch);
         }
@@ -198,6 +216,7 @@ const OPERATORS: [&str; 10] = [ ",", "=", "\\=", ">", ">=", "<", "<=", "+", "-",
 
 fn parse_term(input: &mut Peekable<Lexer>) -> Result<Term, ParseError> {
     let term = match expect_next(input)? {
+        Token::String(string) => Ok(Box::new(TermKind::String(string))),
         Token::Word(name) => {
             match input.peek() {
                 Some(Token::OpenBracket) =>

@@ -5,8 +5,8 @@ Conlog
 ###### *Started June 2, 2021*
 
 A simple prolog interpreter written in Rust with no external crate depedencies.
-It currently supports predicates, integers and lists (but not strings), and
-will parse some of the infix operators including +, -, =, \=, and 'is'.
+It currently supports predicates, integers, strings, and lists, and will parse
+some infix operators including +, -, =, \=, and 'is'.
 
 To run the REPL:
 ```
