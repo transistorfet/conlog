@@ -8,6 +8,7 @@ mod misc;
 mod tree;
 mod parser;
 mod solver;
+mod builtins;
 mod tests;
 
 #[allow(unused_imports)]

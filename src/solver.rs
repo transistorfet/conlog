@@ -2,7 +2,8 @@
 use std::fmt::Debug;
 use std::collections::HashMap;
 
-use crate::tree::{ Term, TermKind, Expr, ExprKind, Clause, atom, integer };
+use crate::tree::{ Term, TermKind, Expr, ExprKind, Clause };
+use crate::builtins::lookup_builtin;
 use crate::misc::UniqueID;
 
 
@@ -61,8 +62,6 @@ impl Bindings {
         })
     }
 }
-
-pub type BuiltinPredicate = fn(&Term, &Bindings, usize) -> Option<Partial>;
 
 pub struct Database {
     clauses: Vec<Clause>,
@@ -255,7 +254,7 @@ pub fn unify_term(term1: &Term, term2: &Term) -> Option<(Term, Bindings)> {
     }
 }
 
-fn simplify_term(term: &Term, bindings: &Bindings, at_rule: usize) -> Option<Partial> {
+pub fn simplify_term(term: &Term, bindings: &Bindings, at_rule: usize) -> Option<Partial> {
     if let Some(func) = lookup_builtin(term) {
         match func(term, bindings, at_rule) {
             Some(partial) => simplify_term(&partial.result, &partial.bindings, partial.rule),
@@ -266,7 +265,7 @@ fn simplify_term(term: &Term, bindings: &Bindings, at_rule: usize) -> Option<Par
     }
 }
 
-fn compare_term(term1: &Term, term2: &Term) -> bool {
+pub fn compare_term(term1: &Term, term2: &Term) -> bool {
     match (&**term1, &**term2) {
         (TermKind::Atom(n), TermKind::Atom(m)) if n == m => true,
         (TermKind::Integer(n), TermKind::Integer(m)) if n == m => true,
@@ -319,115 +318,5 @@ fn rename_expr(expr: Expr, iteration: UniqueID) -> Expr {
             ExprKind::Conjunct(rename_expr(expr1, iteration), rename_expr(expr2, iteration))
         },
     })
-}
-
-
-pub fn lookup_builtin(term: &Term) -> Option<BuiltinPredicate> {
-    match &**term {
-        TermKind::Atom(s) => {
-            match s.as_str() {
-                "!" => Some(builtin_cut_0),
-                "fail" => Some(builtin_fail_0),
-                _ => None
-            }
-        },
-        TermKind::Compound(s, args) => {
-            match s.as_str() {
-                "is" if args.len() == 2 => Some(builtin_is_2),
-                "=" if args.len() == 2 => Some(builtin_equal_2),
-                "\\=" if args.len() == 2 => Some(builtin_not_equal_2),
-                "<" if args.len() == 2 => Some(builtin_less_than_2),
-                ">=" if args.len() == 2 => Some(builtin_greater_than_or_equal_2),
-                "+" if args.len() == 2 => Some(builtin_add_2),
-                "-" if args.len() == 2 => Some(builtin_subtract_2),
-                _ => None
-            }
-        }
-        _ => None,
-    }
-}
-
-fn builtin_cut_0(_term: &Term, bindings: &Bindings, at_rule: usize) -> Option<Partial> {
-    Some(Partial::new(atom("true"), bindings.clone(), at_rule))
-}
-
-fn builtin_fail_0(_term: &Term, _bindings: &Bindings, _at_rule: usize) -> Option<Partial> {
-    None
-}
-
-fn builtin_is_2(term: &Term, bindings: &Bindings, at_rule: usize) -> Option<Partial> {
-    let args = term.get_args()?;
-
-    let rhs = simplify_term(&args[1], bindings, at_rule).unwrap();
-    println!("{:?} {:?}", args[0], rhs.result);
-    match unify_term(&args[0], &rhs.result) {
-        Some((result, newbindings)) => {
-            let bindings = newbindings.merge(bindings)?;
-            Some(Partial::new(result, bindings, at_rule))
-        },
-        None => None,
-    }
-}
-
-fn builtin_equal_2(term: &Term, bindings: &Bindings, at_rule: usize) -> Option<Partial> {
-    let args = term.get_args()?;
-
-    println!("Comparing {} with {}", &args[0], &args[1]);
-    if compare_term(&args[0], &args[1]) {
-        Some(Partial::new(atom("true"), bindings.clone(), at_rule))
-    } else {
-        None
-    }
-}
-
-fn builtin_not_equal_2(term: &Term, bindings: &Bindings, at_rule: usize) -> Option<Partial> {
-    let args = term.get_args()?;
-
-    println!("Comparing {} with {}", &args[0], &args[1]);
-    if !compare_term(&args[0], &args[1]) {
-        Some(Partial::new(atom("true"), bindings.clone(), at_rule))
-    } else {
-        None
-    }
-}
-
-fn builtin_less_than_2(term: &Term, bindings: &Bindings, at_rule: usize) -> Option<Partial> {
-    let args = term.get_args()?;
-
-    println!("Comparing {} with {}", &args[0], &args[1]);
-    match (&*args[0], &*args[1]) {
-        (TermKind::Integer(n), TermKind::Integer(m)) if n < m => Some(Partial::new(atom("true"), bindings.clone(), at_rule)),
-        _ => None
-    }
-}
-
-fn builtin_greater_than_or_equal_2(term: &Term, bindings: &Bindings, at_rule: usize) -> Option<Partial> {
-    let args = term.get_args()?;
-
-    println!("Comparing {} with {}", &args[0], &args[1]);
-    match (&*args[0], &*args[1]) {
-        (TermKind::Integer(n), TermKind::Integer(m)) if n >= m => Some(Partial::new(atom("true"), bindings.clone(), at_rule)),
-        _ => None
-    }
-}
-
-fn builtin_add_2(term: &Term, bindings: &Bindings, at_rule: usize) -> Option<Partial> {
-    let args = term.get_args()?;
-
-    println!("Adding {} with {}", &args[0], &args[1]);
-    match (&*args[0], &*args[1]) {
-        (TermKind::Integer(n), TermKind::Integer(m)) => Some(Partial::new(integer(n + m), bindings.clone(), at_rule)),
-        _ => None
-    }
-}
-
-fn builtin_subtract_2(term: &Term, bindings: &Bindings, at_rule: usize) -> Option<Partial> {
-    let args = term.get_args()?;
-
-    println!("Subtracting {} with {}", &args[0], &args[1]);
-    match (&*args[0], &*args[1]) {
-        (TermKind::Integer(n), TermKind::Integer(m)) => Some(Partial::new(integer(n - m), bindings.clone(), at_rule)),
-        _ => None
-    }
 }
 
