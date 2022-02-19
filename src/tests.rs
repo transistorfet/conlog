@@ -126,5 +126,25 @@ mod tests {
 
 	assert_eq!(format!("{}", partial.result), "nth([1, 8, 904, 234, 42], 3, 234)");
     }
+
+    #[test]
+    fn list_quicksort() {
+	let partial = solve_program_with_query("
+        append([], Ys, Ys).
+        append([X|Xs], Ys, [X|Zs]) :- append(Xs, Ys, Zs).
+
+        pivot(_, [], [], []).
+        pivot(Pivot, [Head|Tail], [Head|LessOrEqualThan], GreaterThan) :- Pivot >= Head, pivot(Pivot, Tail, LessOrEqualThan, GreaterThan). 
+        pivot(Pivot, [Head|Tail], LessOrEqualThan, [Head|GreaterThan]) :- pivot(Pivot, Tail, LessOrEqualThan, GreaterThan).
+
+        quicksort([], []).
+        quicksort([Head|Tail], Sorted) :- pivot(Head, Tail, List1, List2), quicksort(List1, SortedList1), quicksort(List2, SortedList2), append(SortedList1, [Head|SortedList2], Sorted).
+        ",
+        "
+        quicksort([1, 8, 904, 234, 42], Sorted).
+        ");
+
+	assert_eq!(format!("{}", partial.result), "quicksort([1, 8, 904, 234, 42], [1, 8, 42, 234, 904])");
+    }
 }
 

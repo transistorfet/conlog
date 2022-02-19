@@ -212,6 +212,9 @@ pub fn is_atom_of(expr: &Expr, expected: &str) -> bool {
 pub fn unify_term(term1: &Term, term2: &Term) -> Option<(Term, Bindings)> {
     //println!("Unifying term {:?} and {:?}", term1, term2);
     match (&**term1, &**term2) {
+        (TermKind::Atom(n), t) |
+        (t, TermKind::Atom(n)) if n == "_" => Some((Box::new(t.clone()), Bindings::empty())),
+
         (TermKind::Atom(n), TermKind::Atom(m)) if n == m => Some((Box::new(TermKind::Atom(n.clone())), Bindings::empty())),
 
         (TermKind::Integer(n), TermKind::Integer(m)) if n == m => Some((Box::new(TermKind::Integer(*n)), Bindings::empty())),
