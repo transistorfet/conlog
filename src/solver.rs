@@ -115,7 +115,7 @@ impl Query {
 
         println!("Solving {:?} at {}", self.goal, at);
         if let Some(func) = lookup_builtin(&self.goal) {
-            return func(&self.goal, &Bindings::empty(), db.clauses.len());
+            return func(db, &self.goal, &Bindings::empty(), db.clauses.len());
         }
 
         for i in at..db.clauses.len() {
@@ -257,10 +257,10 @@ pub fn unify_term(term1: &Term, term2: &Term) -> Option<(Term, Bindings)> {
     }
 }
 
-pub fn simplify_term(term: &Term, bindings: &Bindings, at_rule: usize) -> Option<Partial> {
+pub fn simplify_term(db: &Database, term: &Term, bindings: &Bindings, at_rule: usize) -> Option<Partial> {
     if let Some(func) = lookup_builtin(term) {
-        match func(term, bindings, at_rule) {
-            Some(partial) => simplify_term(&partial.result, &partial.bindings, partial.rule),
+        match func(db, term, bindings, at_rule) {
+            Some(partial) => simplify_term(db, &partial.result, &partial.bindings, partial.rule),
             None => None,
         }
     } else {

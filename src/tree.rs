@@ -42,7 +42,7 @@ impl From<Term> for Expr {
 }
 
 impl TermKind {
-    pub fn get_args(&self) -> Option<&Vec<Term>> {
+    pub fn get_args(&self) -> Option<&[Term]> {
         match self {
             TermKind::Compound(_, args) => Some(args),
             _ => None,
